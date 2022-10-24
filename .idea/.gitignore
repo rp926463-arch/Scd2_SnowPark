@@ -1,0 +1,19 @@
+# Default ignored files
+\target
+*.class
+*.iml
+*.ipr
+*.iws
+.name
+misc.xml
+modules.xml
+modules
+sbt.xml
+codeStyles
+libraries
+scala_compiler.xml
+vcs.xml
+/out/
+/shelf/
+/workspace.xml
+

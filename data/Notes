@@ -1,0 +1,9 @@
+runControlDate tested Ok
+Basic insert & update scenarios tested Ok
+
+
+======================================================
+Notes ->
+dfSourceUpdates : captures record to Insert for update
+dfTargetUpdates : captures record to update in target
+dfSourceInserts : captures new inserts
