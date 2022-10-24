@@ -1,5 +1,6 @@
 runControlDate tested Ok
 Basic insert & update scenarios tested Ok
+change the scdActiveEndate from 9999-12-31 to null after first load NotOk
 
 
 ======================================================

@@ -5,7 +5,7 @@ class PrivateKeyReader {
   def get_session_object(): Session = {
     var sfOptions = Map(
       "url" -> "bypgtvv-tw48419.snowflakecomputing.com",
-      "user" -> "*****",
+      "user" -> "******",
       "password" -> "*****",
       "role" -> "accountadmin",
       "warehouse" -> "MY_WH",
