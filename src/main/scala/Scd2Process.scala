@@ -1,4 +1,3 @@
-import com.snowflake.snowpark._
 import com.snowflake.snowpark.functions._
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter

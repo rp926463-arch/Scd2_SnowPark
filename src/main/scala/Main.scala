@@ -1,10 +1,10 @@
 object Main {
   def main(args: Array[String]): Unit = {
-    var key_obj = new PrivateKeyReader
+    val key_obj = new PrivateKeyReader
     val session = key_obj.get_session_object()
 
-    var scd_obj = new Scd2Process(session, "STAGING.STORES", "FINAL.STORES")
-    var error_dict = scd_obj.run(Array("store_id")
+    val scd_obj = new Scd2Process(session, "STAGING.STORES", "FINAL.STORES")
+    val error_dict = scd_obj.run(Array("store_id")
       ,"start_date"
       ,"end_date"
       ,"active_flag"
