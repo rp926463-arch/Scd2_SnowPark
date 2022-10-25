@@ -102,3 +102,6 @@
 /project/target/streams/compile/_global/_global/compileOutputs/previous
 /target/scala-2.12/classes/PrivateKeyReader.class
 /target/scala-2.12/classes/Scd2Process.class
+/target/scala-2.12/test-classes/run$.class
+/target/scala-2.12/test-classes/run.class
+/target/scala-2.12/test-classes/square.class

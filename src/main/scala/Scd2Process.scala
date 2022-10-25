@@ -30,10 +30,10 @@ class Scd2Process(session: com.snowflake.snowpark.Session
       error_message = error_message + " Cannot retrieve Column List for Source Table (" + this.targetTable + ")."
 
     if (this.scdStartDateColumnName.isEmpty || this.scdStartDateColumnName.trim() == "")
-      error_message = error_message + " Audit Column (" + this.scdStartDateColumnName + ") not passed for Target table (" + this.targetTable + ")."
+      error_message = error_message + " Audit Column (this.scdStartDateColumnName) not passed for Target table (" + this.targetTable + ")."
 
     if (this.scdEndDateColumnName.isEmpty || this.scdEndDateColumnName.trim() == "")
-      error_message = error_message + " Audit Column (" + this.scdStartDateColumnName + ") not passed for Target table (" + this.targetTable + ")."
+      error_message = error_message + " Audit Column (scdStartDateColumnName) not passed for Target table (" + this.targetTable + ")."
 
     if (targetColumnArray.nonEmpty)
       if (! targetColumnArray.contains(this.scdStartDateColumnName))
@@ -73,35 +73,26 @@ class Scd2Process(session: com.snowflake.snowpark.Session
     }
 
     if (! (sourceColumnArray == targetColumnCompareArray)){
-      var set_dif_source = sourceColumnArray.diff(targetColumnCompareArray)
-      var set_dif_target = targetColumnCompareArray.diff(sourceColumnArray)
-      var set_dif = set_dif_source ++ set_dif_target
+      val set_dif_source = sourceColumnArray.diff(targetColumnCompareArray)
+      val set_dif_target = targetColumnCompareArray.diff(sourceColumnArray)
+      val set_dif = set_dif_source ++ set_dif_target
 
       error_message = error_message + " Column list mismatched between source (" + this.sourceTable + ") and target (" + this.targetTable + "). Found in one but not in other : " + set_dif.mkString(" ") +" . Source Column List: " + sourceColumnArray.mkString(" ") + " Target Column List: " + targetColumnArray.mkString(" ") + " ."
     }
     else if (error_message.isEmpty){
-      //Modify condition here filter(col(this.scdEndDateColumnName).is_null)
-      //===============================================================================================================
-      //Might require modification
-      //===============================================================================================================
-      if (session.table(this.targetTable).filter(col(this.scdEndDateColumnName).is_null).groupBy(this.keyColumns).count.filter(col("count") > 1).count() > 0)
+      val maxStartDateRow = session.table(this.targetTable).agg(max(col(this.scdStartDateColumnName))).first(1)(0)
+      if (! maxStartDateRow.isNullAt(0) && maxStartDateRow.get(0).toString.substring(0,10) > this.runControlDate)
+        error_message = error_message + " Run Control Date parameter (" + this.runControlDate + ") cannot be earlier than the latest Start Date (" + maxStartDateRow.getDate(0).toString() + ") on Target Table / Column (" + this.targetTable + "/ " + this.scdStartDateColumnName + ")."
+      val maxEndDateRow = session.table(this.targetTable).agg(max(col(this.scdEndDateColumnName))).first(1)(0)
+
+      //Add condition here : col(this.scdEndDateColumnName)===lit(maxEndDateRow(0))
+      if (session.table(this.targetTable).filter(col(this.scdEndDateColumnName).is_null || col(this.scdEndDateColumnName)===lit(maxEndDateRow(0))).groupBy(this.keyColumns).count.filter(col("count") > 1).count() > 0)
         error_message = error_message + " Duplicates found based on Key Columns (" + this.keyColumns.mkString(",") + ") in target table " + this.targetTable
       if (session.table(this.sourceTable).groupBy(this.keyColumns).count.filter(col("count") > 1).count() > 0)
         error_message = error_message + " Duplicates found based on Key Columns (" + this.keyColumns.mkString(",") + ") in source table " + this.sourceTable
-      //==============================================================================================================
 
-      var maxStartDateRow = session.table(this.targetTable).agg(max(col(this.scdStartDateColumnName))).first(1)(0)
-      //Modify condition here along with iSNULL || maxStartDateRow == scdActiveEndDate
-      //===============================================================================================================
-      //Might require modification
-      //===============================================================================================================
-
-      if (! maxStartDateRow.isNullAt(0) && maxStartDateRow.get(0).toString.substring(0,10) > this.runControlDate)
-        error_message = error_message + " Run Control Date parameter (" + this.runControlDate + ") cannot be earlier than the latest Start Date (" + maxStartDateRow.getDate(0).toString() + ") on Target Table / Column (" + this.targetTable + "/ " + this.scdStartDateColumnName + ")."
-      var maxEndDateRow = session.table(this.targetTable).agg(max(col(this.scdEndDateColumnName))).first(1)(0)
-
-      println("maxStartDateRow : " + maxStartDateRow)
-      println("maxEndDateRow : " + maxEndDateRow)
+      println("maxStartDateRow : " + maxStartDateRow(0))
+      println("maxEndDateRow : " + maxEndDateRow(0))
 
       if (! maxEndDateRow.isNullAt(0) && this.scdActiveEndDate != null && maxEndDateRow.get(0).toString.substring(0, 10) > this.scdActiveEndDate)
         error_message = error_message + " scdActiveEndDate parameter (" + this.scdActiveEndDate + ") cannot be earlier than latest End Date (" + maxEndDateRow.getDate(0).toString() + ") on Target Table / Column (" + this.targetTable + "/ " + this.scdEndDateColumnName + ")."
@@ -154,24 +145,24 @@ class Scd2Process(session: com.snowflake.snowpark.Session
       error_message = validation_error_message
       commonColumnArray = validation_commonColumnArray
       if (error_message.trim().isEmpty) {
-        var commonColumnString = commonColumnArray.mkString(",")
-        var targetColumnOrderArray = targetColumnArray
+        val commonColumnString = commonColumnArray.mkString(",")
+        val targetColumnOrderArray = targetColumnArray
 
         var dfSource = session.sql("select * " + ", hash(" + commonColumnString + ") as HASH_ROW_VALUE from " + this.sourceTable)
         println("=====================================================================================================")
         println("dfSource Names :" + dfSource.schema.names)
 
 
-        var tmp_scdActiveDate = if (this.scdActiveEndDate == null) this.scdActiveEndDate else "'"+this.scdActiveEndDate+"'"
+        val tmp_scdActiveDate = if (this.scdActiveEndDate == null) this.scdActiveEndDate else "'"+this.scdActiveEndDate+"'"
 
-        var dfTarget = session.sql("select * " + ", hash(" + commonColumnString + ") as HASH_ROW_VALUE from " + this.targetTable + " where (" + this.scdEndDateColumnName + " IS NULL OR coalesce(" + this.scdEndDateColumnName + ", '1900-01-01') = coalesce(" + tmp_scdActiveDate + ", '1901-01-01' ) )")
+        val dfTarget = session.sql("select * " + ", hash(" + commonColumnString + ") as HASH_ROW_VALUE from " + this.targetTable + " where (" + this.scdEndDateColumnName + " IS NULL OR coalesce(" + this.scdEndDateColumnName + ", '1900-01-01') = coalesce(" + tmp_scdActiveDate + ", '1901-01-01' ) )")
         println("dfTarget Names :" + dfTarget.schema.names)
 
 
-        var dfTargetEmpty = dfTarget.filter(col("HASH_ROW_VALUE") === 0)
+        val dfTargetEmpty = dfTarget.filter(col("HASH_ROW_VALUE") === 0)
 
 
-        var dfSourceUpdates = dfSource.join(dfTarget, this.keyColumns,
+        val dfSourceUpdates = dfSource.join(dfTarget, this.keyColumns,
           "inner").filter((! dfSource("HASH_ROW_VALUE") === dfTarget("HASH_ROW_VALUE"))
           && (dfTarget(this.scdEndDateColumnName).is_null
           || (coalesce(dfTarget(this.scdEndDateColumnName), to_date(lit("1901-01-01"))) ===
@@ -183,12 +174,12 @@ class Scd2Process(session: com.snowflake.snowpark.Session
 //        println("SourceUpdates ->")
 //        dfSourceUpdates.show()
 
-        var dfSourceInserts = dfSource.join(dfTarget, this.keyColumns, "anti")
+        val dfSourceInserts = dfSource.join(dfTarget, this.keyColumns, "anti")
 
         println("dfSourceInserts Names :" + dfSourceInserts.schema.names)
         //println(dfSourceInserts.count())
 
-        var dfTargetUpdates = dfTarget.join(dfSource, this.keyColumns,
+        val dfTargetUpdates = dfTarget.join(dfSource, this.keyColumns,
           "inner").filter((!dfSource("HASH_ROW_VALUE") === dfTarget("HASH_ROW_VALUE"))
           && (dfTarget(this.scdEndDateColumnName).is_null
           || (coalesce(dfTarget(this.scdEndDateColumnName), to_date(lit("1901-01-01"))) ===
@@ -202,7 +193,7 @@ class Scd2Process(session: com.snowflake.snowpark.Session
 //        println("TargetUpdates ->")
 //        dfTargetUpdates.show()
 
-        var dfTargetUpdatesUnion = dfTargetEmpty.union(dfTargetUpdates)
+        val dfTargetUpdatesUnion = dfTargetEmpty.union(dfTargetUpdates)
           .select(targetColumnOrderArray)
           .withColumn(this.scdEndDateColumnName, dateadd("day", lit(-1), to_date(lit(this.runControlDate))))
           .withColumn(this.scdActiveFlagColumnName, lit("N"))
@@ -225,7 +216,7 @@ class Scd2Process(session: com.snowflake.snowpark.Session
             .withColumn(this.scdActiveFlagColumnName, lit("N"))
             .select(targetColumnOrderArray)
 
-        var dfSourceInsertsUpdates = dfSourceInserts.union(dfSourceUpdates)
+        val dfSourceInsertsUpdates = dfSourceInserts.union(dfSourceUpdates)
           .withColumn(this.scdStartDateColumnName, to_date(lit(this.runControlDate)))
           .withColumn(this.scdEndDateColumnName, lit(this.scdActiveEndDate))
           .withColumn(this.scdActiveFlagColumnName, lit("Y"))
@@ -247,16 +238,12 @@ class Scd2Process(session: com.snowflake.snowpark.Session
         println("mergeInsertDict : "+mergeInsertDict)
         val merge_key_columns: Array[String] = construct_merge_key_columns(this.keyColumns)
 
-        var mergeUpdateDict = mergeInsertDict.-(this.scdStartDateColumnName).-(this.keyColumns.mkString(","))
+        val mergeUpdateDict = mergeInsertDict.-(this.scdStartDateColumnName).-(this.keyColumns.mkString(","))
         println("mergeUpdateDict : " + mergeUpdateDict)
 
-        var target = session.table(this.targetTable)
+        val target = session.table(this.targetTable)
 
-
-        var ins: Map[String,Int] = Map("Insert" -> 0)
-        var upd: Map[String,Int] = Map("Update" -> 1)
-
-        var merge_build_obj = target.merge(dfSourceInsertsUpdates, ((target(merge_key_columns(0)) ===
+        val merge_build_obj = target.merge(dfSourceInsertsUpdates, ((target(merge_key_columns(0)) ===
           dfSourceInsertsUpdates(merge_key_columns(0)))
           && (target(merge_key_columns(1)) === dfSourceInsertsUpdates(merge_key_columns(1)))
           && (target(merge_key_columns(2)) === dfSourceInsertsUpdates(merge_key_columns(2)))
@@ -266,7 +253,7 @@ class Scd2Process(session: com.snowflake.snowpark.Session
           coalesce(dfSourceInsertsUpdates(this.scdStartDateColumnName), to_date(lit("1901-01-01")))
           ))).whenMatched.update(mergeUpdateDict).whenNotMatched.insert(mergeInsertDict)
 
-        var merge_execute_result = merge_build_obj.collect()
+        val merge_execute_result = merge_build_obj.collect()
 
         return_code = 0
 
