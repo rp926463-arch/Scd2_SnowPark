@@ -3,7 +3,10 @@ import com.snowflake.snowpark.functions._
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
 
-class Scd2Process(session: com.snowflake.snowpark.Session, sourceTable: String, targetTable: String) {
+class Scd2Process(session: com.snowflake.snowpark.Session
+                  , sourceTable: String
+                  , targetTable: String)
+{
   var keyColumns: Array[String] = Array[String]()
   var scdStartDateColumnName: String = ""
   var scdEndDateColumnName: String = ""
@@ -18,7 +21,6 @@ class Scd2Process(session: com.snowflake.snowpark.Session, sourceTable: String, 
   def validate_params() : (String, Seq[Any]) = {
     var error_message: String = ""
     var targetColumnCompareArray: Seq[Any] = Seq[Any]()
-    //var SourceColumnCompareArray: Seq[Any] = Seq[Any]()
 
     val targetScdColumnArray = Seq(this.scdStartDateColumnName, this.scdEndDateColumnName, this.scdActiveFlagColumnName)
 
@@ -36,8 +38,8 @@ class Scd2Process(session: com.snowflake.snowpark.Session, sourceTable: String, 
     if (targetColumnArray.nonEmpty)
       if (! targetColumnArray.contains(this.scdStartDateColumnName))
         error_message = error_message + " Target Table (" + this.targetTable + ") has missing column " + this.scdStartDateColumnName + "."
-      if (! targetColumnArray.contains(this.scdEndDateColumnName))
-        error_message = error_message + " Target Table (" + this.targetTable + ") has missing column " + this.scdEndDateColumnName + "."
+    if (! targetColumnArray.contains(this.scdEndDateColumnName))
+      error_message = error_message + " Target Table (" + this.targetTable + ") has missing column " + this.scdEndDateColumnName + "."
 
     if (sourceColumnArray.nonEmpty && targetColumnArray.nonEmpty){
       if(this.keyColumns.isEmpty || this.keyColumns.length == 0)
@@ -129,12 +131,12 @@ class Scd2Process(session: com.snowflake.snowpark.Session, sourceTable: String, 
   }
 
   def run(keyColumns: Array[String]
-         , scdStartDateColumnName: String
-         , scdEndDateColumnName: String
-         , scdActiveflagColumnName: String
-         , refreshType: String
-         , runControlDate: String
-         , scdActiveEndDate: String): String = {
+          , scdStartDateColumnName: String
+          , scdEndDateColumnName: String
+          , scdActiveflagColumnName: String
+          , refreshType: String
+          , runControlDate: String
+          , scdActiveEndDate: String): String = {
     var return_code: Int = -1
     var error_message: String = ""
     var commonColumnArray: Seq[Any] = Seq[Any]()
@@ -160,7 +162,9 @@ class Scd2Process(session: com.snowflake.snowpark.Session, sourceTable: String, 
         println("dfSource Names :" + dfSource.schema.names)
 
 
-        var dfTarget = session.sql("select * " + ", hash(" + commonColumnString + ") as HASH_ROW_VALUE from " + this.targetTable + " where (" + this.scdEndDateColumnName + " IS NULL OR coalesce(" + this.scdEndDateColumnName + ", '1900-01-01') = coalesce(" + this.scdActiveEndDate + ", '1901-01-01' ) )")
+        var tmp_scdActiveDate = if (this.scdActiveEndDate == null) this.scdActiveEndDate else "'"+this.scdActiveEndDate+"'"
+
+        var dfTarget = session.sql("select * " + ", hash(" + commonColumnString + ") as HASH_ROW_VALUE from " + this.targetTable + " where (" + this.scdEndDateColumnName + " IS NULL OR coalesce(" + this.scdEndDateColumnName + ", '1900-01-01') = coalesce(" + tmp_scdActiveDate + ", '1901-01-01' ) )")
         println("dfTarget Names :" + dfTarget.schema.names)
 
 
@@ -169,34 +173,34 @@ class Scd2Process(session: com.snowflake.snowpark.Session, sourceTable: String, 
 
         var dfSourceUpdates = dfSource.join(dfTarget, this.keyColumns,
           "inner").filter((! dfSource("HASH_ROW_VALUE") === dfTarget("HASH_ROW_VALUE"))
-                            && (dfTarget(this.scdEndDateColumnName).is_null
-                            || (coalesce(dfTarget(this.scdEndDateColumnName), to_date(lit("1901-01-01"))) ===
-                              coalesce(to_date(lit(this.scdActiveEndDate)), to_date(lit("1901-01-01"))))
-                            )).select(dfSource("*"))
+          && (dfTarget(this.scdEndDateColumnName).is_null
+          || (coalesce(dfTarget(this.scdEndDateColumnName), to_date(lit("1901-01-01"))) ===
+          coalesce(to_date(lit(this.scdActiveEndDate)), to_date(lit("1901-01-01"))))
+          )).select(dfSource("*"))
 
         println("dfSourceUpdates Names :" + dfSourceUpdates.schema.names)
-        println(dfSourceUpdates.count())
-        println("SourceUpdates ->")
-        dfSourceUpdates.show()
+//        println(dfSourceUpdates.count())
+//        println("SourceUpdates ->")
+//        dfSourceUpdates.show()
 
         var dfSourceInserts = dfSource.join(dfTarget, this.keyColumns, "anti")
 
         println("dfSourceInserts Names :" + dfSourceInserts.schema.names)
-        println(dfSourceInserts.count())
+        //println(dfSourceInserts.count())
 
         var dfTargetUpdates = dfTarget.join(dfSource, this.keyColumns,
           "inner").filter((!dfSource("HASH_ROW_VALUE") === dfTarget("HASH_ROW_VALUE"))
-                            && (dfTarget(this.scdEndDateColumnName).is_null
-                            || (coalesce(dfTarget(this.scdEndDateColumnName), to_date(lit("1901-01-01"))) ===
-                                coalesce(to_date(lit(this.scdActiveEndDate)), to_date(lit("1901-01-01")))))
-                            && (! coalesce(dfTarget(this.scdStartDateColumnName), to_date(lit("1901-01-01"))) ===
-                                to_date(lit(this.runControlDate))
-                            )).select(dfTarget("*"))
+          && (dfTarget(this.scdEndDateColumnName).is_null
+          || (coalesce(dfTarget(this.scdEndDateColumnName), to_date(lit("1901-01-01"))) ===
+          coalesce(to_date(lit(this.scdActiveEndDate)), to_date(lit("1901-01-01")))))
+          && (! coalesce(dfTarget(this.scdStartDateColumnName), to_date(lit("1901-01-01"))) ===
+          to_date(lit(this.runControlDate))
+          )).select(dfTarget("*"))
 
         println("dfTargetUpdates Names :" + dfTargetUpdates.schema.names)
-        println(dfTargetUpdates.count())
-        println("TargetUpdates ->")
-        dfTargetUpdates.show()
+//        println(dfTargetUpdates.count())
+//        println("TargetUpdates ->")
+//        dfTargetUpdates.show()
 
         var dfTargetUpdatesUnion = dfTargetEmpty.union(dfTargetUpdates)
           .select(targetColumnOrderArray)
@@ -205,14 +209,14 @@ class Scd2Process(session: com.snowflake.snowpark.Session, sourceTable: String, 
           .select(targetColumnOrderArray)
 
         println("dfTargetUpdatesUnion Names :" + dfTargetUpdatesUnion.schema.names)
-        println(dfTargetUpdatesUnion.count())
-        println("TargetUpdatesUnion ->")
-        dfTargetUpdatesUnion.show()
+//        println(dfTargetUpdatesUnion.count())
+//        println("TargetUpdatesUnion ->")
+//        dfTargetUpdatesUnion.show()
 
         var dfTargetDeletes = dfTargetEmpty.select(targetColumnOrderArray)
 
         println("dfTargetDeletes Names :" + dfTargetDeletes.schema.names)
-        println(dfTargetDeletes.count())
+        //println(dfTargetDeletes.count())
 
         if (this.refreshType == "full")
           dfTargetDeletes = dfTarget.join(dfSource, this.keyColumns, "anti")
@@ -232,10 +236,10 @@ class Scd2Process(session: com.snowflake.snowpark.Session, sourceTable: String, 
         var mergeInsertDict: collection.immutable.Map[String, com.snowflake.snowpark.Column] = collection.immutable.Map[String, com.snowflake.snowpark.Column]()
 
         println("dfSourceInsertsUpdates Names :" + dfSourceInsertsUpdates.schema.names)
-        println(dfSourceInsertsUpdates.count())
-        println("SourceInsertsUpdates ->")
-        dfSourceInsertsUpdates.show()
-        println("=====================================================================================================")
+//        println(dfSourceInsertsUpdates.count())
+//        println("SourceInsertsUpdates ->")
+//        dfSourceInsertsUpdates.show()
+//        println("=====================================================================================================")
 
         for (c <- dfSourceInsertsUpdates.schema.names) {
           mergeInsertDict += c -> dfSourceInsertsUpdates(c)
